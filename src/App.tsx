@@ -625,7 +625,7 @@ function App() {
             Os melhores preços da região! Compramos diretamente da granja e repassamos essa economia para você. 
             Qualidade garantida e frescor incomparável.
           </p>
-          <img src="/banner.jpg" alt="Banner Casa dos Ovos" className="w-full max-w-5xl mx-auto rounded-2xl shadow-lg object-cover mt-4" />
+          <img src="/banner.png" alt="Banner Casa dos Ovos" className="w-full max-w-5xl mx-auto rounded-2xl shadow-lg object-cover mt-4" />
         </div>
       </section>
 
