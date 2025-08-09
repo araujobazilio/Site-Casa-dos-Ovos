@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { ShoppingCart, MapPin, Phone, Clock, Edit3, Plus, Trash2, Save, Eye, Settings, Loader2 } from 'lucide-react';
 import { supabase, Product, StoreSettings } from './lib/supabase';
 import EggClassificationTable from './components/EggClassificationTable';
@@ -10,11 +11,67 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  // Auth state
+  const [session, setSession] = useState<Session | null>(null);
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('admin');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Load data from Supabase
   useEffect(() => {
     loadData();
   }, []);
+
+  // Load Supabase session and subscribe to auth changes
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (isMounted) setSession(data.session);
+    })();
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+    return () => {
+      isMounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setAuthError(null);
+      setAuthLoading(true);
+      const emailInput = loginEmail.trim();
+      const normalizedEmail = emailInput.toLowerCase() === 'admin' ? 'admin@casadosovos.com' : emailInput;
+      const { error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password: loginPassword,
+      });
+      if (error) throw error;
+      setShowLogin(false);
+      setIsAdmin(true);
+    } catch (err: any) {
+      console.error('Erro de login:', err);
+      setAuthError(err?.message || 'Falha no login. Verifique suas credenciais.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error('Erro ao sair:', err);
+    } finally {
+      setIsAdmin(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -318,13 +375,21 @@ function App() {
                 <Settings className="text-orange-500" />
                 Painel Administrativo
               </h1>
-              <button
-                onClick={() => setIsAdmin(false)}
-                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-              >
-                <Eye size={18} />
-                Ver Site
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleLogout}
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg transition-colors"
+                >
+                  Sair
+                </button>
+                <button
+                  onClick={() => setIsAdmin(false)}
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                >
+                  <Eye size={18} />
+                  Ver Site
+                </button>
+              </div>
             </div>
           </div>
         </header>
@@ -334,72 +399,95 @@ function App() {
           <section className="bg-white rounded-2xl shadow-lg p-6 mb-8">
             <h2 className="text-xl font-bold mb-4">Informações da Loja</h2>
             {storeSettings && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Nome da Loja</label>
-                  <input
-                    type="text"
-                    value={storeSettings.store_name}
-                    onChange={(e) => setStoreSettings(prev => prev ? ({
-                      ...prev,
-                      store_name: e.target.value
-                    }) : null)}
-                    onBlur={() => storeSettings && handleSaveStoreSettings({ store_name: storeSettings.store_name })}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                  />
+              <div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Nome da Loja</label>
+                    <input
+                      type="text"
+                      value={storeSettings.store_name}
+                      onChange={(e) => setStoreSettings(prev => prev ? ({
+                        ...prev,
+                        store_name: e.target.value
+                      }) : null)}
+                      onBlur={() => storeSettings && handleSaveStoreSettings({ store_name: storeSettings.store_name })}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Telefone</label>
+                    <input
+                      type="text"
+                      value={storeSettings.phone}
+                      onChange={(e) => setStoreSettings(prev => prev ? ({
+                        ...prev,
+                        phone: e.target.value
+                      }) : null)}
+                      onBlur={() => storeSettings && handleSaveStoreSettings({ phone: storeSettings.phone })}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">WhatsApp (apenas números)</label>
+                    <input
+                      type="text"
+                      value={storeSettings.whatsapp}
+                      onChange={(e) => setStoreSettings(prev => prev ? ({
+                        ...prev,
+                        whatsapp: e.target.value
+                      }) : null)}
+                      onBlur={() => storeSettings && handleSaveStoreSettings({ whatsapp: storeSettings.whatsapp })}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                      placeholder="5511987654321"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Horário de Funcionamento</label>
+                    <input
+                      type="text"
+                      value={storeSettings.hours}
+                      onChange={(e) => setStoreSettings(prev => prev ? ({
+                        ...prev,
+                        hours: e.target.value
+                      }) : null)}
+                      onBlur={() => storeSettings && handleSaveStoreSettings({ hours: storeSettings.hours })}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-2">Endereço</label>
+                    <input
+                      type="text"
+                      value={storeSettings.address}
+                      onChange={(e) => setStoreSettings(prev => prev ? ({
+                        ...prev,
+                        address: e.target.value
+                      }) : null)}
+                      onBlur={() => storeSettings && handleSaveStoreSettings({ address: storeSettings.address })}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Telefone</label>
-                  <input
-                    type="text"
-                    value={storeSettings.phone}
-                    onChange={(e) => setStoreSettings(prev => prev ? ({
-                      ...prev,
-                      phone: e.target.value
-                    }) : null)}
-                    onBlur={() => storeSettings && handleSaveStoreSettings({ phone: storeSettings.phone })}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">WhatsApp (apenas números)</label>
-                  <input
-                    type="text"
-                    value={storeSettings.whatsapp}
-                    onChange={(e) => setStoreSettings(prev => prev ? ({
-                      ...prev,
-                      whatsapp: e.target.value
-                    }) : null)}
-                    onBlur={() => storeSettings && handleSaveStoreSettings({ whatsapp: storeSettings.whatsapp })}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                    placeholder="5511987654321"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Horário de Funcionamento</label>
-                  <input
-                    type="text"
-                    value={storeSettings.hours}
-                    onChange={(e) => setStoreSettings(prev => prev ? ({
-                      ...prev,
-                      hours: e.target.value
-                    }) : null)}
-                    onBlur={() => storeSettings && handleSaveStoreSettings({ hours: storeSettings.hours })}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-2">Endereço</label>
-                  <input
-                    type="text"
-                    value={storeSettings.address}
-                    onChange={(e) => setStoreSettings(prev => prev ? ({
-                      ...prev,
-                      address: e.target.value
-                    }) : null)}
-                    onBlur={() => storeSettings && handleSaveStoreSettings({ address: storeSettings.address })}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                  />
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={async () => {
+                      if (!storeSettings) return;
+                      setSavingSettings(true);
+                      await handleSaveStoreSettings({
+                        store_name: storeSettings.store_name,
+                        phone: storeSettings.phone,
+                        whatsapp: storeSettings.whatsapp,
+                        hours: storeSettings.hours,
+                        address: storeSettings.address
+                      });
+                      setSavingSettings(false);
+                    }}
+                    disabled={savingSettings}
+                    className="bg-orange-500 hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                  >
+                    {savingSettings ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                    {savingSettings ? 'Salvando...' : 'Salvar alterações'}
+                  </button>
                 </div>
               </div>
             )}
@@ -482,7 +570,13 @@ function App() {
     <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-50">
       {/* Admin Access Button */}
       <button
-        onClick={() => setIsAdmin(true)}
+        onClick={() => {
+          if (session) {
+            setIsAdmin(true);
+          } else {
+            setShowLogin(true);
+          }
+        }}
         className="fixed bottom-4 right-4 bg-gray-800 hover:bg-gray-900 text-white p-3 rounded-full shadow-lg transition-colors z-40"
         title="Acesso Administrativo"
       >
@@ -501,7 +595,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center">
-              <ShoppingCart className="text-orange-500 mr-3" size={32} />
+              <img src="/logotipo.jpg" alt="Casa dos Ovos — Logotipo" className="h-12 w-12 object-contain mr-3 rounded-full" />
               <h1 className="text-3xl font-bold text-gray-800">
                 {storeSettings?.store_name || 'Ovos da Granja'}
               </h1>
@@ -531,6 +625,7 @@ function App() {
             Os melhores preços da região! Compramos diretamente da granja e repassamos essa economia para você. 
             Qualidade garantida e frescor incomparável.
           </p>
+          <img src="/banner.jpg" alt="Banner Casa dos Ovos" className="w-full max-w-5xl mx-auto rounded-2xl shadow-lg object-cover mt-4" />
         </div>
       </section>
 
@@ -581,14 +676,25 @@ function App() {
                 </div>
               </div>
             </div>
-            <div className="bg-gray-200 h-96 rounded-2xl flex items-center justify-center">
-              <div className="text-center">
-                <MapPin className="text-orange-500 mx-auto mb-4" size={48} />
-                <p className="text-gray-600 text-lg font-semibold">Mapa Interativo</p>
-                <p className="text-gray-500 mt-2">
-                  Integração com Google Maps<br />
-                  pode ser adicionada aqui
-                </p>
+            <div className="rounded-2xl overflow-hidden shadow-lg bg-white">
+              <iframe
+                title="Mapa - Casa dos Ovos"
+                src={`https://www.google.com/maps?q=${encodeURIComponent(storeSettings?.address || 'Rua Adelino Pereira Valente - nº 148 - Loja 21 - Vila Amélia - Nova Friburgo - RJ - CEP 28625535')}&t=&z=16&ie=UTF8&iwloc=&output=embed`}
+                className="w-full h-96 border-0"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                allowFullScreen
+              />
+              <div className="p-4 bg-white border-t flex justify-end">
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(storeSettings?.address || 'Rua Adelino Pereira Valente - nº 148 - Loja 21 - Vila Amélia - Nova Friburgo - RJ - CEP 28625535')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  <MapPin size={18} />
+                  Ver rota no Google Maps
+                </a>
               </div>
             </div>
           </div>
@@ -599,7 +705,7 @@ function App() {
       <footer className="bg-gray-800 text-white py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto text-center">
           <div className="flex justify-center items-center mb-6">
-            <ShoppingCart className="text-orange-500 mr-3" size={32} />
+            <img src="/logotipo.jpg" alt="Casa dos Ovos — Logotipo" className="h-10 w-10 object-contain mr-3 rounded-full" />
             <h3 className="text-2xl font-bold">
               {storeSettings?.store_name || 'Ovos da Granja'}
             </h3>
@@ -618,6 +724,58 @@ function App() {
           </div>
         </div>
       </footer>
+
+      {/* Login Modal */}
+      {showLogin && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-xl font-bold mb-4">Login Administrativo</h3>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Usuário ou E-mail</label>
+                <input
+                  type="text"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="admin ou admin@casadosovos.com"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Senha</label>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="admin123"
+                  required
+                />
+              </div>
+              {authError && (
+                <p className="text-red-600 text-sm">{authError}</p>
+              )}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLogin(false)}
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-semibold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed text-white py-3 rounded-lg font-semibold transition-colors"
+                >
+                  {authLoading ? 'Entrando...' : 'Entrar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
