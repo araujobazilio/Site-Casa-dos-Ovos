@@ -19,6 +19,7 @@ function App() {
   const [loginPassword, setLoginPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [applyingCatalog, setApplyingCatalog] = useState(false);
 
   // Load data from Supabase
   useEffect(() => {
@@ -40,6 +41,80 @@ function App() {
       authListener.subscription.unsubscribe();
     };
   }, []);
+
+  const applySimplifiedCatalog = async () => {
+    if (!confirm('Esta ação vai desativar os produtos atuais e publicar o catálogo simplificado com 5 itens. Deseja continuar?')) return;
+    try {
+      setApplyingCatalog(true);
+      // Desativar todos os produtos atuais
+      await supabase.from('products').update({ is_active: false }).eq('is_active', true);
+
+      const items = [
+        {
+          name: 'OVO GRANDE',
+          description: 'Ovos grandes, ideais para o dia a dia e receitas diversas.',
+          price: 0,
+          image: '',
+          type: 'estojo',
+          classification: 'G',
+          quantity: 1,
+          is_active: true,
+        },
+        {
+          name: 'OVO EXTRA BRANCO',
+          description: 'Casca branca, categoria extra, excelente rendimento em preparos.',
+          price: 0,
+          image: '',
+          type: 'estojo',
+          classification: 'XL',
+          quantity: 1,
+          is_active: true,
+        },
+        {
+          name: 'OVO EXTRA VERMELHO',
+          description: 'Casca vermelha, categoria extra, sabor marcante e versátil.',
+          price: 0,
+          image: '',
+          type: 'estojo',
+          classification: 'XL',
+          quantity: 1,
+          is_active: true,
+        },
+        {
+          name: 'OVO JUMBO',
+          description: 'Ovos muito grandes, perfeitos para receitas especiais e maior rendimento.',
+          price: 0,
+          image: '',
+          type: 'estojo',
+          classification: 'Jumbo',
+          quantity: 1,
+          is_active: true,
+        },
+        {
+          name: 'OVO DE CODORNA',
+          description: 'Pequenos e delicados, ótimos para saladas, aperitivos e pratos especiais.',
+          price: 0,
+          image: '',
+          type: 'codorna',
+          classification: 'P',
+          quantity: 1,
+          is_active: true,
+        },
+      ];
+
+      const { error } = await supabase.from('products').insert(items);
+      if (error) throw error;
+
+      await loadData();
+      alert('Catálogo simplificado aplicado com sucesso.');
+    } catch (err) {
+      console.error('Erro ao aplicar catálogo simplificado:', err);
+      const message = (err && typeof err === 'object' && 'message' in err) ? (err as any).message : 'Não foi possível aplicar o catálogo simplificado. Tente novamente.';
+      alert(`Erro: ${message}`);
+    } finally {
+      setApplyingCatalog(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,11 +181,11 @@ function App() {
     }
   };
 
-  const handleWhatsAppClick = (productName: string, price: number) => {
+  const handleWhatsAppClick = (productName: string) => {
     if (!storeSettings?.whatsapp) return;
     
     const message = encodeURIComponent(
-      `Olá! Tenho interesse no produto: ${productName} - R$ ${price.toFixed(2).replace('.', ',')}. Gostaria de mais informações.`
+      `Olá! Tenho interesse no produto: ${productName}. Poderiam informar o preço e a disponibilidade?`
     );
     window.open(`https://wa.me/${storeSettings.whatsapp}?text=${message}`, '_blank');
   };
@@ -214,21 +289,20 @@ function App() {
       </div>
       <div className="p-6">
         <h3 className="text-xl font-bold text-gray-800 mb-2">{product.name}</h3>
-        <p className="text-gray-600 mb-2 text-sm">
-          <span className="font-semibold">Quantidade:</span> {product.quantity} {product.type === 'codorna' ? 'unidades' : 'dúzias'}
-        </p>
         <p className="text-gray-600 mb-4 leading-relaxed">{product.description}</p>
-        <div className="flex items-center justify-between">
-          <span className="text-3xl font-bold text-orange-500">
-            R$ {product.price.toFixed(2).replace('.', ',')}
-          </span>
+        <div className={isAdminMode ? "flex items-center justify-between" : "flex items-center justify-end"}>
+          {isAdminMode && (
+            <span className="text-3xl font-bold text-orange-500">
+              R$ {product.price.toFixed(2).replace('.', ',')}
+            </span>
+          )}
           {!isAdminMode && storeSettings && (
             <button
-              onClick={() => handleWhatsAppClick(product.name, product.price)}
+              onClick={() => handleWhatsAppClick(product.name)}
               className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-full font-semibold flex items-center gap-2 transition-all duration-300 transform hover:scale-105"
             >
               <Phone size={18} />
-              WhatsApp
+              Consultar preço no WhatsApp
             </button>
           )}
         </div>
@@ -283,15 +357,6 @@ function App() {
                 step="0.01"
                 value={formData.price}
                 onChange={(e) => setFormData(prev => ({ ...prev, price: parseFloat(e.target.value) }))}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Quantidade</label>
-              <input
-                type="number"
-                value={formData.quantity}
-                onChange={(e) => setFormData(prev => ({ ...prev, quantity: parseInt(e.target.value) }))}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               />
             </div>
@@ -532,13 +597,22 @@ function App() {
           <section className="bg-white rounded-2xl shadow-lg p-6">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold">Produtos ({products.length})</h2>
-              <button
-                onClick={() => setIsAddingProduct(true)}
-                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-              >
-                <Plus size={18} />
-                Adicionar Produto
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={applySimplifiedCatalog}
+                  disabled={applyingCatalog}
+                  className="bg-gray-200 hover:bg-gray-300 disabled:opacity-60 disabled:cursor-not-allowed text-gray-800 px-4 py-2 rounded-lg transition-colors"
+                >
+                  {applyingCatalog ? 'Aplicando...' : 'Aplicar Catálogo Simplificado'}
+                </button>
+                <button
+                  onClick={() => setIsAddingProduct(true)}
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                >
+                  <Plus size={18} />
+                  Adicionar Produto
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {products.map(product => (
